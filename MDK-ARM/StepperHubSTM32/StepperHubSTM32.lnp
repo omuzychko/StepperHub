@@ -1,0 +1,28 @@
+--cpu Cortex-M4.fp
+"stepperhubstm32\stm32f4xx_hal_pwr.o"
+"stepperhubstm32\stm32f4xx_hal_cortex.o"
+"stepperhubstm32\stm32f4xx_hal_uart.o"
+"stepperhubstm32\stm32f4xx_hal_gpio.o"
+"stepperhubstm32\stm32f4xx_hal_dma_ex.o"
+"stepperhubstm32\stm32f4xx_hal_flash.o"
+"stepperhubstm32\stm32f4xx_hal_tim.o"
+"stepperhubstm32\stm32f4xx_hal_dma.o"
+"stepperhubstm32\stm32f4xx_hal_tim_ex.o"
+"stepperhubstm32\stm32f4xx_hal_flash_ex.o"
+"stepperhubstm32\stm32f4xx_hal_pwr_ex.o"
+"stepperhubstm32\stm32f4xx_hal_rcc.o"
+"stepperhubstm32\stm32f4xx_hal_rcc_ex.o"
+"stepperhubstm32\stm32f4xx_hal_flash_ramfunc.o"
+"stepperhubstm32\stm32f4xx_hal.o"
+"stepperhubstm32\startup_stm32f446xx.o"
+"stepperhubstm32\stm32f4xx_hal_msp.o"
+"stepperhubstm32\main.o"
+"stepperhubstm32\stm32f4xx_it.o"
+"stepperhubstm32\serial.o"
+"stepperhubstm32\steppercontroller.o"
+"stepperhubstm32\system_stm32f4xx.o"
+--library_type=microlib --strict --scatter "StepperHubSTM32\StepperHubSTM32.sct"
+
+--diag_suppress=L6329 --summary_stderr --info summarysizes --map --xref --callgraph --symbols
+--info sizes --info totals --info unused --info veneers
+--list "StepperHubSTM32.map" -o StepperHubSTM32\StepperHubSTM32.axf
