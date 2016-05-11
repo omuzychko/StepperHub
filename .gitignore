@@ -1,0 +1,9 @@
+Debug/
+Listings/
+Objects/
+MDK-ARM/StepperHubSTM32/
+*.uvguix.*
+*.uvoptx
+*.o
+*.build_log.htm
+

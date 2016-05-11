@@ -898,10 +898,10 @@ ARM Macro Assembler    Page 14
               00000000 
 Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4.fp --apcs=int
 erwork --depend=stepperhubstm32\startup_stm32f446xx.d -ostepperhubstm32\startup
-_stm32f446xx.o -IC:\GItHub\StepperHubSTM32\MDK-ARM\RTE -I"C:\Program Files\Keil
-V5\ARM\PACK\ARM\CMSIS\4.5.0\CMSIS\Include" -I"C:\Program Files\KeilV5\ARM\PACK\
-Keil\STM32F4xx_DFP\2.8.0" --predefine="__EVAL SETA 1" --predefine="__MICROLIB S
-ETA 1" --predefine="__UVISION_VERSION SETA 514" --predefine="_RTE_ SETA 1" --pr
+_stm32f446xx.o -IC:\StepperHub\MDK-ARM\RTE -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\4.5.
+0\CMSIS\Include -IC:\Keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.7.0\Drivers\CMSIS\De
+vice\ST\STM32F4xx\Include --predefine="__EVAL SETA 1" --predefine="__MICROLIB S
+ETA 1" --predefine="__UVISION_VERSION SETA 518" --predefine="_RTE_ SETA 1" --pr
 edefine="STM32F446xx SETA 1" --list=startup_stm32f446xx.lst startup_stm32f446xx
 .s
 

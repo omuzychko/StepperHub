@@ -152,7 +152,7 @@ void StepControllerHandler(stepper_state * stepper){
 
 void InitStepperState(char * name, stepper_state * stepper, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN) {
     // ensure that ARR preload mode is enabled on timer
-    // but we don't need to ste the PWM pulse duration preload, it is constant all the time
+    // but we don't need to set the PWM pulse duration preload, it is constant all the time
     stepTimer -> Instance -> CR1 |=TIM_CR1_ARPE;
     
     stepper -> name             = name;
