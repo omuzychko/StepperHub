@@ -7,8 +7,16 @@ typedef enum {
     SS_BREAKING          = 0x10,
     SS_BREAKCORRECTION   = 0x20,
     SS_STOPPED           = 0x80
-
 } stepper_status;
+
+typedef enum {
+    SERR_OK 										= 0,
+		SERR_MUSTBESTOPPED 					= 1,
+		SERR_NOMORESTATESAVAILABLE 	= 2,
+		SERR_STATENOTFOUND					= 3,
+		SERR_VALUETOOLOW						= 4,
+		SERR_VALUETOOHIGH						= 5
+} stepper_error;
 
 typedef struct {
     char name;
@@ -61,9 +69,81 @@ typedef struct {
 extern uint32_t STEP_TIMER_CLOCK;
 extern uint32_t STEP_CONTROLLER_PERIOD_US;
 
-stepper_state * GetStepper(char stepperName);
-void StepHandler(char stepperName);
-void StepControllerHandler(void);
-void InitStepperState(char stepperName, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN);
+// Assigns the PWM timer instance and direction I/O PIN to the stepper_state controller
+stepper_error Stepper_SetupPeripherals(char stepperName, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN);
+
+// Initializes new or updates existing stepper_state to default values
+// - MinSPS = 1
+// - MaxSPS = 400000
+// - AccSPS = 1
+// - AccPrescaller = 1
+stepper_error Stepper_InitDefaultState(char stepperName);
+
+void Stepper_ExecuteAllControllers(void);
+void Stepper_PulseTimerUpdate(char stepperName);
+
+// Adds the specified ammount of steps to the target position of the the motor.
+// THREAD-SAFE (may be invoked at any time)
+// If stepper_status is SS_RUNNING the motor will adjust its state to get to the new target in fastest possible way.
+// So, if needed - the motor will break to the full stop and immediatelly will start rotating in oposite direction.
+stepper_error Stepper_AddTargetPosition(char stepperName, int32_t value);
+
+// Sets the new target position (step number) of the motor (where it should rotate to).
+// THREAD-SAFE (may be invoked at any time)
+// If stepper_status is SS_RUNNING the motor will adjust its state to get to the new target in fastest possible way
+// So, if needed - the motor will break to the full stop and immediatelly will start rotating in oposite direction.
+stepper_error Stepper_SetTargetPosition(char stepperName, int32_t value);
+
+// Resets the current possion of the stepper to 0. 
+// So the current position becomes a new reference point for target value.
+// NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
+stepper_error Stepper_SetZero(char stepperName);
+
+// Sets the minimum stepper speed (steps-per-second). 
+// Min value is 1Hz.
+// Max value is 400kHz;
+// NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
+stepper_error Stepper_SetMinSPS(char stepperName, int32_t value);
+
+// Sets the maximum stepper speed (steps-per-second).
+// Min value is 1Hz.
+// Max value is 400kHz;
+// NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
+stepper_error Stepper_SetMaxSPS(char stepperName, int32_t value);
+
+// Sets the acceleration, as factor of (STEP_CONTROLLER_PERIOD_US*10^6) steps/second^2.
+// Min value is 1.
+// NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
+stepper_error Stepper_SetAccSPS(char stepperName, int32_t value);
+
+// Sets the acceleration prescaler (the divider AccSPS). 
+// Min value is 1.
+// NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
+stepper_error Stepper_SetAccPrescaler(char stepperName, int32_t value);
+
+
+// Sets the new target position (step number) of the motor (where it should rotate to).
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetTargetPosition(char stepperName);
+
+// Gets the current possion of the stepper (step number). 
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetCurrentPosition(char stepperName);
+
+// Gets the minimum stepper speed (steps-per-second). 
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetMinSPS(char stepperName);
+
+// Gets the maximum stepper speed (steps-per-second).
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetMaxSPS(char stepperName);
+
+// Gets the acceleration, as factor of (STEP_CONTROLLER_PERIOD_US*10^6) steps/second^2.
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetAccSPS(char stepperName);
+
+// Gets the acceleration prescaler (the divider AccSPS). 
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetAccPrescaler(char stepperName);
 
 

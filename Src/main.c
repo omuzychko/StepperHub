@@ -85,7 +85,6 @@ int main(void)
   /* USER CODE BEGIN 1 */
 #if defined (TEST) 
   int i =0;
-  stepper_state * stepperX, * stepperY, * stepperZ;
 #endif
   /* USER CODE END 1 */
 
@@ -112,9 +111,13 @@ int main(void)
   STEP_TIMER_CLOCK = HAL_RCC_GetHCLKFreq();
   STEP_CONTROLLER_PERIOD_US =  1000000U /(HAL_RCC_GetHCLKFreq() / htim14.Init.Period);
   
-  InitStepperState('X', &htim1, TIM_CHANNEL_3, GPIOB, GPIO_PIN_4);
-  InitStepperState('Y', &htim2, TIM_CHANNEL_2, GPIOB, GPIO_PIN_10);
-  InitStepperState('Z', &htim3, TIM_CHANNEL_2, GPIOA, GPIO_PIN_8);
+	Stepper_SetupPeripherals('X', &htim1, TIM_CHANNEL_3, GPIOB, GPIO_PIN_4);
+  Stepper_SetupPeripherals('Y', &htim2, TIM_CHANNEL_2, GPIOB, GPIO_PIN_10);
+  Stepper_SetupPeripherals('Z', &htim3, TIM_CHANNEL_2, GPIOA, GPIO_PIN_8);
+	
+  Stepper_InitDefaultState('X');
+  Stepper_InitDefaultState('Y');
+  Stepper_InitDefaultState('Z');
 
 
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
@@ -133,13 +136,9 @@ int main(void)
   printf ("=========================================\r\n");
 
 #if defined (TEST) 
-  stepperX = GetStepper('X');
-  stepperY = GetStepper('Y');
-  stepperZ = GetStepper('Z');
-  
-  stepperX->targetPosition = 5;
-  stepperY->targetPosition = 5;
-  stepperZ->targetPosition = 10;
+
+  Stepper_SetTargetPosition('X',10);
+
 #endif
 
   /* USER CODE END 2 */
@@ -149,16 +148,15 @@ int main(void)
   while (1)
   {
 #if defined (TEST) 
-    if (stepperZ->currentPosition == 10) {
-       
-        stepperX->targetPosition = 0;
-        stepperY->targetPosition = -3;
-        stepperZ->targetPosition = -10;
+    if (Stepper_GetCurrentPosition('X') == 10) {   
+        Stepper_SetTargetPosition('X', -10);
+        Stepper_SetTargetPosition('Y', -5);
+        Stepper_SetTargetPosition('Z',	0);
     }
-    if (stepperZ->currentPosition == -10) {
-        stepperX->targetPosition = 1;
-        stepperY->targetPosition = 3;
-        stepperZ->targetPosition = 10;
+    if (Stepper_GetCurrentPosition('X') == -10) {   
+        Stepper_SetTargetPosition('X', 10);
+        Stepper_SetTargetPosition('Y', 5);
+        Stepper_SetTargetPosition('Z', 1);
     }
     
     // this will check how UART tollerates TX buffer overflow
@@ -453,7 +451,7 @@ void TIM1_UP_TIM10_IRQHandler(void)
     {
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
-      StepHandler('X');
+      Stepper_PulseTimerUpdate('X');
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
     }
   }
@@ -468,7 +466,7 @@ void TIM2_IRQHandler(void)
     {
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim2, TIM_FLAG_UPDATE);
-      StepHandler('Y');
+      Stepper_PulseTimerUpdate('Y');
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
     }
   }
@@ -482,7 +480,7 @@ void TIM3_IRQHandler(void)
     {        
       //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim3, TIM_FLAG_UPDATE);
-      StepHandler('Z');
+      Stepper_PulseTimerUpdate('Z');
       //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
     }
   }
@@ -497,7 +495,7 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void)
       HAL_GPIO_WritePin(GPIOA, LED_Pin, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim14, TIM_FLAG_UPDATE);
       
-      StepControllerHandler();
+      Stepper_ExecuteAllControllers();
 			Serial_CheckRxTimeout();
       
       HAL_GPIO_WritePin(GPIOA, LED_Pin, GPIO_PIN_RESET);
