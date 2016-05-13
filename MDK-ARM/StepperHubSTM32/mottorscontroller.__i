@@ -1,6 +1,0 @@
--c --cpu Cortex-M4.fp -D__EVAL -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I../Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Include -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include --C99
--I C:\GItHub\StepperHubSTM32\MDK-ARM\RTE
--I "C:\Program Files\KeilV5\ARM\PACK\ARM\CMSIS\4.5.0\CMSIS\Include"
--I "C:\Program Files\KeilV5\ARM\PACK\Keil\STM32F4xx_DFP\2.8.0"
--D__UVISION_VERSION="514" -D_RTE_ -DSTM32F446xx -DUSE_HAL_DRIVER -DSTM32F446xx
--o stepperhubstm32\mottorscontroller.o --omf_browse stepperhubstm32\mottorscontroller.crf --depend stepperhubstm32\mottorscontroller.d "mottorsController.c"
