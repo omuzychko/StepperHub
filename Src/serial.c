@@ -4,8 +4,10 @@
 #include "serial.h"
 
 
-#define TX_BUFFER_SIZE (64)
-#define RX_BUFFER_SIZE (256)
+#define TX_BUFFER_SIZE (4*1024)
+#define RX_BUFFER_SIZE (4*1024)
+
+char * TX_OVERFLOW_MSG = "!!! TX BUFFER OVERFLOW !!!";
 
  
 /* Struct FILE is implemented in stdio.h */
@@ -23,7 +25,7 @@ volatile uint8_t * txInPtr = txBuffer;
 // Pointer for TX buffer writes on the moment of last DMA transfer has been started
 volatile uint8_t * txInSnapshot;
 
-volatile uint8_t * rxPtr;
+volatile uint8_t * rxPtr = rxBuffer;
 
 volatile serial_status serialStatus;
 
@@ -31,80 +33,90 @@ volatile serial_status serialStatus;
 //		TRANSMITTER															//
 // ========================================== //
  
-int fputc(int ch, FILE *f) {
-	/* Do your stuff here */
-	/* Send your custom byte */
-	/* Send byte to USART */
 
-	*txInPtr = (uint8_t)ch;
-	txInPtr++;
-	if (txInPtr == txBuffer+TX_BUFFER_SIZE) txInPtr = txBuffer;
-	if (txInPtr == txOutPtr) {
-		while(serialStatus & SERIAL_TX){}
-		Serial_WriteString("\r\nTX_BUFFER_OVERFLOW\r\n");
-	}
-	Serial_ExecutePendingTransmits();
-	/* If everything is OK, you have to return character written */
-	return ch;
-	/* If character is not correct, you can return EOF (-1) to stop writing */
-	//return -1;
-}
-
-int itoa(int i, char b[]) {
-    char const digit[] = "0123456789";
-    char* p = b;
-    int count;
-    int shifter = 0;
-    if(i<0){
-        *p++ = '-';
-        i *= -1;
-    }
-    shifter = i;
-    do{ //Move to where representation ends
-        ++p;
-        shifter = shifter/10;
-    }while(shifter);
-    *p = '\0';
-    
-    count = (p - (char *)b);
-    do{ //Move back, inserting digits as u go
-        *--p = digit[i%10];
-        i = i/10;
-    }while(i);
-    return count;
-}
-
-void Serial_ExecutePendingTransmits(void) {
-  // Transfer is already in progress
-  if (serialStatus & SERIAL_TX)
-    return;
-  
-  // No new data
-  if (txInPtr == txOutPtr)
-    return;
-  
-  txInSnapshot = txInPtr;    
-  // we should send to DMA all the recently written data, or till the end of the circular buffer
-  uint16_t txLength = (txInSnapshot > txOutPtr) ?  (txInSnapshot - txOutPtr) : (TX_BUFFER_SIZE - (txOutPtr-txBuffer));
-
-  HAL_UART_Transmit_DMA(&huart2, (uint8_t *)txOutPtr, txLength);
-	serialStatus |= SERIAL_TX;
-}
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 	if (huart != &huart2)
 		return;
 	
-	// Data transmitted from DMA buffer
-	// Prepare the origin of the next DMA transfer
+ 
+	
+
+  
+  if (serialStatus & SERIAL_TXOVERFLOW) {
+      
+      if (serialStatus & SERIAL_TXOVERFLOWMSG) {
+        serialStatus &= ~(SERIAL_TXOVERFLOW | SERIAL_TXOVERFLOWMSG);
+      } else {
+        serialStatus |= SERIAL_TXOVERFLOWMSG;
+        while(HAL_UART_Transmit_DMA(&huart2, (uint8_t *)TX_OVERFLOW_MSG, strlen(TX_OVERFLOW_MSG)) == HAL_BUSY) { __HAL_UNLOCK(&huart2); }
+        return;
+      }
+  }
+  
+  serialStatus &= ~SERIAL_TX;
+
   txOutPtr = (txInSnapshot > txOutPtr) ? txInSnapshot : txBuffer;
 	
-	// We are still in TX mode unless we updated txOutPtr
-	serialStatus &= ~SERIAL_TX;
   Serial_ExecutePendingTransmits();
 }
 
+volatile int32_t syncLock;
+void Serial_ExecutePendingTransmits(void) {
+  // Transfer is already in progress
+  
+  syncLock++;
+  
+  if (syncLock > 1) {
+    syncLock--;
+    return;
+  }
+  
+  if (serialStatus & SERIAL_TX)  {
+    syncLock--;
+    return;
+  }
+
+  // We have no new data
+  if (txInPtr == txOutPtr && (serialStatus & SERIAL_TXOVERFLOW)==0) {
+    syncLock--;
+    return;
+  }
+  
+  txInSnapshot = txInPtr;    
+  // we should send to DMA all the recently written data, or till the end of the circular buffer
+  uint16_t txLength = (txInSnapshot > txOutPtr) ?  (txInSnapshot - txOutPtr) : (TX_BUFFER_SIZE - (txOutPtr-txBuffer));
+
+  while(HAL_UART_Transmit_DMA(&huart2, (uint8_t *)txOutPtr, txLength) == HAL_BUSY) { __HAL_UNLOCK(&huart2); }
+  serialStatus |= SERIAL_TX;
+
+  syncLock--;
+}
+
+
+int fputc(int ch, FILE *f) {
+	/* Send byte to USART */
+  
+  if (serialStatus & SERIAL_TXOVERFLOW) return -1;
+  
+	*txInPtr = (uint8_t)ch;
+	txInPtr++;
+	if (txInPtr == txBuffer+TX_BUFFER_SIZE) txInPtr = txBuffer;
+  if (txInPtr == txOutPtr) {
+    serialStatus |= SERIAL_TXOVERFLOW;
+  }
+
+  // Having this here means - that we might start separate DMA transfers to UART for each written bit separatelly
+  // so for better performance - don't user printf(..), but use Serial_Write... methods
+  // The use DMA ore efficiently, invoking it after the whole string has been put into the buffer
+	Serial_ExecutePendingTransmits();
+
+  return ch;
+}
+
 void Serial_WriteBytes(uint8_t * data, uint32_t length) {
+  if (serialStatus & SERIAL_TXOVERFLOW) return;
+  
   uint8_t * limit = data + length;
   if (length == 0)
     return;
@@ -112,12 +124,13 @@ void Serial_WriteBytes(uint8_t * data, uint32_t length) {
   do {
     *txInPtr = *data;
     txInPtr++;
-    if (txInPtr == txBuffer+TX_BUFFER_SIZE) txInPtr = txBuffer;
+    if (txInPtr >= txBuffer+TX_BUFFER_SIZE) txInPtr = txBuffer;
     if (txInPtr == txOutPtr) {
-      while(serialStatus & SERIAL_TX){}
-      Serial_WriteString("\r\nTX_BUFFER_OVERFLOW\r\n");
+      serialStatus |= SERIAL_TXOVERFLOW;
+      break;
     }
   } while(++data < limit);
+  
 	Serial_ExecutePendingTransmits();
 }
 
@@ -127,10 +140,29 @@ void Serial_WriteString(char * str){
 }
 
 void Serial_WriteInt(int32_t i) {
+    char const digit[] = "0123456789";
     char str[15];
-    char * head = &str[0];
-    itoa(i, str);
-    Serial_WriteString(head);
+    char * p = str;
+    int shifter = 0;
+    
+    if(i<0){
+        *p++ = '-';
+        i *= -1;
+    }
+    
+    shifter = i;
+    do{
+        ++p;
+        shifter = shifter/10;
+    }while(shifter);
+    *p = '\0';
+    
+    do{
+        *--p = digit[i%10];
+        i = i/10;
+    }while(i);
+    
+    Serial_WriteString(p);
 }
 
 // ========================================== //
@@ -144,22 +176,22 @@ void ProcessRxDataItem(uint8_t byte) {
 }
 
 void Serial_InitRxSequence(void) {
-	if (serialStatus & SERIAL_RX)
-		return;
-
-	HAL_UART_Receive_DMA(&huart2, rxBuffer, RX_BUFFER_SIZE);
-	serialStatus |= SERIAL_RX;
+  while(HAL_UART_Receive_DMA(&huart2, rxBuffer, RX_BUFFER_SIZE) == HAL_BUSY) { __HAL_UNLOCK(&huart2); }
+  serialStatus |= SERIAL_RX;
 }
 
-// This might be invoked nested in HAL_UART_RxCpltCallback
 void Serial_CheckRxTimeout(void) {
-	uint32_t bytesTransfered;
+  // WARNING
+  // This one executed by e timer with higher priority then DMA and UART interrupts
+  // This might be invoked nested in HAL_UART_RxCpltCallback
 
+	int32_t bytesTransfered;
+  // we should not do anuthing if transmition stopped in HAL_UART_RxCpltCallback
 	if (!(serialStatus & SERIAL_RX)) {
 		return;
 	}
-	
-	bytesTransfered = (RX_BUFFER_SIZE - huart2.hdmarx->Instance->NDTR);
+
+  bytesTransfered = (RX_BUFFER_SIZE - huart2.hdmarx->Instance->NDTR);
 
 	while(rxPtr < rxBuffer+bytesTransfered) {
 		ProcessRxDataItem(*rxPtr++);
@@ -171,10 +203,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 		return;
 	
 	serialStatus &= ~SERIAL_RX;
-		
+
 	while(rxPtr < rxBuffer+RX_BUFFER_SIZE) {
 		ProcessRxDataItem(*rxPtr++);
 	}
+  
 	rxPtr = rxBuffer;
 
 	Serial_InitRxSequence();

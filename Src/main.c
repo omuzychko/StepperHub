@@ -56,10 +56,6 @@ DMA_HandleTypeDef hdma_usart2_tx;
 uint32_t STEP_TIMER_CLOCK;
 uint32_t STEP_CONTROLLER_PERIOD_US;
 
-stepper_state stepperX;
-stepper_state stepperY;
-stepper_state stepperZ;
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -86,9 +82,11 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
-
+#if defined (TEST) 
+  int i =0;
+  stepper_state * stepperX, * stepperY, * stepperZ;
+#endif
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -114,13 +112,10 @@ int main(void)
   STEP_TIMER_CLOCK = HAL_RCC_GetHCLKFreq();
   STEP_CONTROLLER_PERIOD_US =  1000000U /(HAL_RCC_GetHCLKFreq() / htim14.Init.Period);
   
-  InitStepperState("X",&stepperX, &htim1, TIM_CHANNEL_3, GPIOB, GPIO_PIN_4);
-  InitStepperState("Y",&stepperY, &htim2, TIM_CHANNEL_2, GPIOB, GPIO_PIN_10);
-  InitStepperState("Z",&stepperZ, &htim3, TIM_CHANNEL_2, GPIOA, GPIO_PIN_8);
+  InitStepperState('X', &htim1, TIM_CHANNEL_3, GPIOB, GPIO_PIN_4);
+  InitStepperState('Y', &htim2, TIM_CHANNEL_2, GPIOB, GPIO_PIN_10);
+  InitStepperState('Z', &htim3, TIM_CHANNEL_2, GPIOA, GPIO_PIN_8);
 
-  UpdateStepTimerToCurrentSPS(&stepperX);
-  UpdateStepTimerToCurrentSPS(&stepperY);
-  UpdateStepTimerToCurrentSPS(&stepperZ);
 
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
@@ -132,38 +127,47 @@ int main(void)
   // This will run our StepController timer and enable interrupt for it as well
   HAL_TIM_Base_Start_IT(&htim14);
 	
-	Serial_WriteString("Ready. Clock: ");
-	Serial_WriteInt(STEP_TIMER_CLOCK);
-	Serial_WriteString("Hz Controller: ");
-	Serial_WriteInt(STEP_CONTROLLER_PERIOD_US);
-	Serial_WriteString("uS\r\n");
-	
-	printf("PrintF check!\r\n");
+	printf("\r\n");
+  printf ("============== Stepper Hub ==============\r\n");
+  printf ("  CPU Clock: %d MHz StepperCtrl: %d us\r\n", STEP_TIMER_CLOCK/1000000, STEP_CONTROLLER_PERIOD_US);
+  printf ("=========================================\r\n");
 
 #if defined (TEST) 
-  stepperX.targetPosition = 5;
-  stepperY.targetPosition = 5;
-  stepperZ.targetPosition = 10;
+  stepperX = GetStepper('X');
+  stepperY = GetStepper('Y');
+  stepperZ = GetStepper('Z');
+  
+  stepperX->targetPosition = 5;
+  stepperY->targetPosition = 5;
+  stepperZ->targetPosition = 10;
 #endif
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */  
+  /* USER CODE BEGIN WHILE */
   while (1)
   {
 #if defined (TEST) 
-    if (stepperZ.currentPosition == 10) {
-        stepperX.targetPosition = 0;
-        stepperY.targetPosition = -3;
-        stepperZ.targetPosition = -10;
+    if (stepperZ->currentPosition == 10) {
+       
+        stepperX->targetPosition = 0;
+        stepperY->targetPosition = -3;
+        stepperZ->targetPosition = -10;
     }
-    if (stepperZ.currentPosition == -10) {
-        stepperX.targetPosition = 1;
-        stepperY.targetPosition = 3;
-        stepperZ.targetPosition = 10;
+    if (stepperZ->currentPosition == -10) {
+        stepperX->targetPosition = 1;
+        stepperY->targetPosition = 3;
+        stepperZ->targetPosition = 10;
     }
+    
+    // this will check how UART tollerates TX buffer overflow
+    // printf("PF %d\r\n", i++);
 #endif
+    
+    
+     
+
 
   /* USER CODE END WHILE */
 
@@ -354,7 +358,7 @@ void MX_USART2_UART_Init(void)
 {
 
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200 ;
+  huart2.Init.BaudRate = 115200;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -375,7 +379,7 @@ void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Stream5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 4, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 3, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
   /* DMA1_Stream6_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 4, 0);
@@ -428,7 +432,7 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10|GPIO_PIN_4, GPIO_PIN_RESET);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 4, 0);
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 3, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
@@ -449,7 +453,7 @@ void TIM1_UP_TIM10_IRQHandler(void)
     {
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
-      StepHandler(&stepperX);
+      StepHandler('X');
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
     }
   }
@@ -464,7 +468,7 @@ void TIM2_IRQHandler(void)
     {
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim2, TIM_FLAG_UPDATE);
-      StepHandler(&stepperY);
+      StepHandler('Y');
       //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
     }
   }
@@ -478,7 +482,7 @@ void TIM3_IRQHandler(void)
     {        
       //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim3, TIM_FLAG_UPDATE);
-      StepHandler(&stepperZ);
+      StepHandler('Z');
       //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
     }
   }
@@ -492,10 +496,10 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void)
     {
       HAL_GPIO_WritePin(GPIOA, LED_Pin, GPIO_PIN_SET);
       __HAL_TIM_CLEAR_FLAG(&htim14, TIM_FLAG_UPDATE);
-      StepControllerHandler(&stepperX);
-      StepControllerHandler(&stepperY);
-      StepControllerHandler(&stepperZ);
+      
+      StepControllerHandler();
 			Serial_CheckRxTimeout();
+      
       HAL_GPIO_WritePin(GPIOA, LED_Pin, GPIO_PIN_RESET);
     }
   }
@@ -519,6 +523,7 @@ void assert_failed(uint8_t* file, uint32_t line)
   /* User can add his own implementation to report the file name and line number,
     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
+
 }
 
 #endif

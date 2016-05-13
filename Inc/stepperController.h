@@ -11,7 +11,7 @@ typedef enum {
 } stepper_status;
 
 typedef struct {
-    char * name;
+    char name;
     // reference to step-pulse timer and its channel
     TIM_HandleTypeDef * STEP_TIMER;
     uint32_t  STEP_CHANNEL;
@@ -61,8 +61,9 @@ typedef struct {
 extern uint32_t STEP_TIMER_CLOCK;
 extern uint32_t STEP_CONTROLLER_PERIOD_US;
 
-void InitStepperState(char * name, stepper_state * stepper, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN);
-void UpdateStepTimerToCurrentSPS(stepper_state * stepper);
-void StepControllerHandler(stepper_state * stepper);
-void StepHandler(stepper_state * stepper);
+stepper_state * GetStepper(char stepperName);
+void StepHandler(char stepperName);
+void StepControllerHandler(void);
+void InitStepperState(char stepperName, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN);
+
 

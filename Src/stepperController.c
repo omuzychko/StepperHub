@@ -1,6 +1,21 @@
+#include <string.h>
 #include "stepperController.h"
 #include "serial.h"
 
+#define MAX_STEPPERS_COUNT 3
+
+static stepper_state steppers[MAX_STEPPERS_COUNT];
+static uint32_t initializedSteppersCount;
+
+stepper_state * GetStepper(char stepperName) {
+  int32_t i = initializedSteppersCount;
+  while(i--){
+    if (steppers[i].name == stepperName)
+      return &steppers[i];
+  }
+  // if nothing found - take the default very first stepper in the collection
+  return &steppers[0];
+}
 
 int32_t GetStepDirectionUnit(stepper_state * stepper){
     return (stepper->status & SS_RUNNING_BACKWARD) ? -1 : 1;
@@ -40,7 +55,8 @@ void IncrementSPS(stepper_state * stepper){
     }
 }
 
-void StepHandler(stepper_state * stepper){
+void StepHandler(char stepperName){
+  stepper_state * stepper = GetStepper(stepperName);
   switch (stepper->status & ~(SS_BREAKING|SS_BREAKCORRECTION)){
     case SS_STARTING:
         if (stepper->currentPosition > stepper->targetPosition){
@@ -65,16 +81,13 @@ void StepHandler(stepper_state * stepper){
             // We reached or passed through our target position at the stopping speed
             stepper->status = SS_STOPPED;
             HAL_TIM_PWM_Stop(stepper->STEP_TIMER, stepper->STEP_CHANNEL);
-            Serial_WriteString(stepper->name);
-            Serial_WriteString(".stop:");
-            Serial_WriteInt(stepper->currentPosition);
-            Serial_WriteString("\r\n");
+            printf("%c.stop:%d\r\n", stepper->name, stepper->currentPosition);
         }}
       break;
   }
 }
 
-void StepControllerHandler(stepper_state * stepper){
+void StepControl(stepper_state * stepper){
     stepper_status status = stepper -> status;
   
     if (status & SS_STOPPED) { 
@@ -150,19 +163,33 @@ void StepControllerHandler(stepper_state * stepper){
     }
 }
 
-void InitStepperState(char * name, stepper_state * stepper, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN) {
+void StepControllerHandler(void){
+  int32_t i = initializedSteppersCount;
+  while(i--)  
+    StepControl(&steppers[i]);
+}
+
+void InitStepperState(char stepperName, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN) {
+  
+    stepper_state * stepper;
+  
+    if (initializedSteppersCount == MAX_STEPPERS_COUNT)
+      return;
+    
+    stepper = &steppers[initializedSteppersCount++];
+    
     // ensure that ARR preload mode is enabled on timer
     // but we don't need to set the PWM pulse duration preload, it is constant all the time
     stepTimer -> Instance -> CR1 |=TIM_CR1_ARPE;
-    
-    stepper -> name             = name;
+
+    stepper -> name             = stepperName;
     stepper -> STEP_TIMER       = stepTimer;
     stepper -> STEP_CHANNEL     = stepChannel;
     stepper -> DIR_GPIO         = dirGPIO;
     stepper -> DIR_PIN          = dirPIN;
     
-    stepper -> minSPS           = 150;       // this is like an hour per turn in microstepping mode
-    stepper -> maxSPS           = 400000;   // 400kHz is 2.5uS per step, while theoretically possible limit for dirver is 2uS (as per A4988 datasheet)
+    stepper -> minSPS           = 500;       // this is like an hour or two per turn in microstepping mode
+    stepper -> maxSPS           = 400000;  // 400kHz is 2.5uS per step, while theoretically possible limit for A4988 dirver is 2uS
     stepper -> currentSPS       = stepper -> minSPS;
     stepper -> accelerationSPS  = stepper -> minSPS;
     
@@ -179,5 +206,7 @@ void InitStepperState(char * name, stepper_state * stepper, TIM_HandleTypeDef * 
     stepper -> breakInitiationSPS       = stepper -> maxSPS;
    
     stepper -> status = SS_STOPPED;
+    
+    UpdateStepTimerToCurrentSPS(stepper);
 }
 
