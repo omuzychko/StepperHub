@@ -1,3 +1,4 @@
+
 #include <stdint.h>
 
 typedef enum {
@@ -7,15 +8,19 @@ typedef enum {
   SERIAL_RX             = 0x10      // RX DMA transfer in progress
 } serial_status;
 
-/* We need to implement own __FILE struct */
-/* FILE struct is used from __FILE */
+/* C printf(...) support */
 struct __FILE {
     int dummy;
 };
 
+
+// TX
 void Serial_WriteBytes(uint8_t * data, uint32_t length);
 void Serial_WriteString(char * str);
 void Serial_WriteInt(int32_t i);
 void Serial_ExecutePendingTransmits(void);
+
+// RX
 void Serial_InitRxSequence(void);
 void Serial_CheckRxTimeout(void);
+void Serial_RxCallback(uint8_t byte);

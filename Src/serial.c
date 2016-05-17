@@ -18,31 +18,28 @@ extern UART_HandleTypeDef huart2;
 static uint8_t txBuffer[TX_BUFFER_SIZE];
 static uint8_t rxBuffer[RX_BUFFER_SIZE];
 
+
+static volatile int32_t syncLock;
+
 // Pointer for TX buffer reads by DMA
-volatile uint8_t * txOutPtr = txBuffer;
+static volatile uint8_t * txOutPtr = txBuffer;
 // Pointer for TX buffer writes
-volatile uint8_t * txInPtr = txBuffer;
+static volatile uint8_t * txInPtr = txBuffer;
 // Pointer for TX buffer writes on the moment of last DMA transfer has been started
-volatile uint8_t * txInSnapshot;
+static volatile uint8_t * txInSnapshot;
 
-volatile uint8_t * rxPtr = rxBuffer;
+static volatile uint8_t * rxPtr = rxBuffer;
 
-volatile serial_status serialStatus;
+static volatile serial_status serialStatus;
 
 // ========================================== //
 //		TRANSMITTER															//
 // ========================================== //
- 
-
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 	if (huart != &huart2)
 		return;
 	
- 
-	
-
-  
   if (serialStatus & SERIAL_TXOVERFLOW) {
       
       if (serialStatus & SERIAL_TXOVERFLOWMSG) {
@@ -61,7 +58,6 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
   Serial_ExecutePendingTransmits();
 }
 
-volatile int32_t syncLock;
 void Serial_ExecutePendingTransmits(void) {
   // Transfer is already in progress
   
@@ -169,10 +165,19 @@ void Serial_WriteInt(int32_t i) {
 //		RECEIVER																//
 // ========================================== //
 
-void ProcessRxDataItem(uint8_t byte) {
-	// Test feedback
-	uint8_t byteArr[] = { byte };
- 	Serial_WriteBytes(byteArr, 1);
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	if (huart != &huart2)
+		return;
+	
+	serialStatus &= ~SERIAL_RX;
+
+	while(rxPtr < rxBuffer+RX_BUFFER_SIZE) {
+		Serial_RxCallback(*rxPtr++);
+	}
+  
+	rxPtr = rxBuffer;
+
+	Serial_InitRxSequence();
 }
 
 void Serial_InitRxSequence(void) {
@@ -194,24 +199,16 @@ void Serial_CheckRxTimeout(void) {
   bytesTransfered = (RX_BUFFER_SIZE - huart2.hdmarx->Instance->NDTR);
 
 	while(rxPtr < rxBuffer+bytesTransfered) {
-		ProcessRxDataItem(*rxPtr++);
+		Serial_RxCallback(*rxPtr++);
 	}
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-	if (huart != &huart2)
-		return;
-	
-	serialStatus &= ~SERIAL_RX;
-
-	while(rxPtr < rxBuffer+RX_BUFFER_SIZE) {
-		ProcessRxDataItem(*rxPtr++);
-	}
-  
-	rxPtr = rxBuffer;
-
-	Serial_InitRxSequence();
+__weak void Serial_RxCallback(uint8_t byte) {
+	// Test feedback
+	uint8_t byteArr[] = { byte };
+ 	Serial_WriteBytes(byteArr, 1);
 }
+
 
 
 

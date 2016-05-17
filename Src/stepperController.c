@@ -2,6 +2,8 @@
 #include "stepperController.h"
 #include "serial.h"
 
+#define MIN_SPS 1
+#define MAX_SPS 400000
 #define MAX_STEPPERS_COUNT 10
 
 static stepper_state steppers[MAX_STEPPERS_COUNT];
@@ -101,8 +103,8 @@ stepper_error Stepper_InitDefaultState(char stepperName) {
 			return SERR_MUSTBESTOPPED;
 		}
 
-    stepper -> minSPS           = 1;       // this is like an hour or two per turn in microstepping mode
-    stepper -> maxSPS           = 400000;  // 400kHz is 2.5uS per step, while theoretically possible limit for A4988 dirver is 2uS
+    stepper -> minSPS           = MIN_SPS;       // this is like an hour or two per turn in microstepping mode
+    stepper -> maxSPS           = MAX_SPS;  // 400kHz is 2.5uS per step, while theoretically possible limit for A4988 dirver is 2uS
     stepper -> currentSPS       = stepper -> minSPS;
     stepper -> accelerationSPS  = stepper -> minSPS;
     
@@ -214,7 +216,11 @@ void Stepper_PulseTimerUpdate(char stepperName){
         } else if (stepper->currentPosition < stepper->targetPosition){
             stepper->status = SS_RUNNING_FORWARD;
             stepper->DIR_GPIO->BSRR = stepper->DIR_PIN;
-        }     
+        } else if (stepper->currentPosition == stepper->targetPosition) {
+            stepper->status = SS_STOPPED;
+            HAL_TIM_PWM_Stop(stepper->STEP_TIMER, stepper->STEP_CHANNEL);
+        }
+				
       break;   
     case SS_RUNNING_FORWARD:
     case SS_RUNNING_BACKWARD: {
@@ -244,18 +250,6 @@ void Stepper_ExecuteAllControllers(void){
     ExecuteController(&steppers[i]);
 }
 
-// Adds the specified ammount of steps to the target position of the the motor.
-// THREAD-SAFE (may be invoked at any time)
-// If stepper_status is SS_RUNNING the motor will adjust its state to get to the new target in fastest possible way.
-// So, if needed - the motor will break to the full stop and immediatelly will start rotating in oposite direction.
-stepper_error Stepper_AddTargetPosition(char stepperName, int32_t value){
-	stepper_state * stepper = GetState(stepperName);
-	if (stepper == NULL)
-		return SERR_STATENOTFOUND;
-	stepper->targetPosition += value;
-	return SERR_OK;
-}
-
 // Sets the new target position (step number) of the motor (where it should rotate to).
 // THREAD-SAFE (may be invoked at any time)
 // If stepper_status is SS_RUNNING the motor will adjust its state to get to the new target in fastest possible way
@@ -268,17 +262,18 @@ stepper_error Stepper_SetTargetPosition(char stepperName, int32_t value){
 	return SERR_OK;
 }
 
-// Resets the current possion of the stepper to 0. 
-// So the current position becomes a new reference point for target value.
+// Sets the new value for the current possion of the stepper. 
+// So it becomes a new reference point for target value.
+// The same value will be assigned to target position - otherwise the mottor will start moving.
 // NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
-stepper_error Stepper_SetZero(char stepperName){
+stepper_error Stepper_SetCurrentPosition(char stepperName, int32_t value){
 	stepper_state * stepper = GetState(stepperName);
 	if (stepper == NULL)
 		return SERR_STATENOTFOUND;
 	if (!(stepper->status&SS_STOPPED))
 		return SERR_MUSTBESTOPPED;
-	stepper->targetPosition  = 0;
-	stepper->currentPosition = 0;
+	stepper->targetPosition  = 
+	stepper->currentPosition = value;
 	return SERR_OK;
 }
 
@@ -292,15 +287,24 @@ stepper_error Stepper_SetMinSPS(char stepperName, int32_t value){
 		return SERR_STATENOTFOUND;
 	if (!(stepper->status&SS_STOPPED))
 		return SERR_MUSTBESTOPPED;
-	stepper->minSPS = value;
-	stepper->currentSPS = value;
+	
+	if (value > MAX_SPS)
+		stepper->minSPS = stepper->currentSPS = MAX_SPS;
+	else if (value < MIN_SPS)
+		stepper->minSPS = stepper->currentSPS = MIN_SPS;
+	else
+		stepper->minSPS = stepper->currentSPS = value;
+	
+	if (stepper->minSPS > stepper->maxSPS)
+		stepper->maxSPS = stepper->minSPS;
+
 	UpdateStepTimerToCurrentSPS(stepper);
 	return SERR_OK;
 }
 
 // Sets the maximum stepper speed (steps-per-second).
 // Min value is 1Hz.
-// Max value is 400kHz{}
+// Max value is 400kHz.
 // NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
 stepper_error Stepper_SetMaxSPS(char stepperName, int32_t value){
 	stepper_state * stepper = GetState(stepperName);
@@ -308,12 +312,23 @@ stepper_error Stepper_SetMaxSPS(char stepperName, int32_t value){
 		return SERR_STATENOTFOUND;
 	if (!(stepper->status&SS_STOPPED))
 		return SERR_MUSTBESTOPPED;
-	stepper->maxSPS = value;
+	
+	if (value > MAX_SPS)
+		stepper->maxSPS = MAX_SPS;
+	else if (value < MIN_SPS)
+		stepper->maxSPS = MIN_SPS;
+	else
+		stepper->maxSPS = value;
+	
+	if (stepper->minSPS > stepper->maxSPS)
+		stepper->minSPS = stepper->currentSPS = stepper->maxSPS;
+	
 	return SERR_OK;
 }
 
 // Sets the acceleration, as factor of (STEP_CONTROLLER_PERIOD_US*10^6) steps/second^2.
 // Min value is 1.
+// Max value is 400kHz
 // NOT THREAD-SAFE (stepper_status must be SS_STOPPED).
 stepper_error Stepper_SetAccSPS(char stepperName, int32_t value){
 	stepper_state * stepper = GetState(stepperName);
@@ -321,7 +336,14 @@ stepper_error Stepper_SetAccSPS(char stepperName, int32_t value){
 		return SERR_STATENOTFOUND;
 	if (!(stepper->status&SS_STOPPED))
 		return SERR_MUSTBESTOPPED;
-	stepper->accelerationSPS = value;
+	
+	if (value > MAX_SPS)
+		stepper->accelerationSPS = MAX_SPS;
+	else if (value < MIN_SPS)
+		stepper->accelerationSPS = MIN_SPS;
+	else
+		stepper->accelerationSPS = value;
+	
 	return SERR_OK;
 }
 
@@ -334,7 +356,7 @@ stepper_error Stepper_SetAccPrescaler(char stepperName, int32_t value){
 		return SERR_STATENOTFOUND;
 	if (!(stepper->status&SS_STOPPED))
 		return SERR_MUSTBESTOPPED;
-	stepper->stepCtrlPrescaller = value;
+	stepper->stepCtrlPrescaller = (value < 1) ? 1 : value;
 	return SERR_OK;
 }
 
@@ -380,5 +402,3 @@ int32_t Stepper_GetAccPrescaler(char stepperName) {
 	stepper_state * stepper = GetState(stepperName);
 	return  (stepper == NULL) ? 0 : stepper->stepCtrlPrescaller;
 }
-
-
