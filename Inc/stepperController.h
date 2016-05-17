@@ -1,6 +1,7 @@
 #include "stm32f4xx_hal.h"
 
 typedef enum {
+    SS_UNDEFINED         = 0x00,
     SS_RUNNING_BACKWARD  = 0x01,
     SS_RUNNING_FORWARD   = 0x02,
     SS_STARTING          = 0x04,
@@ -10,12 +11,10 @@ typedef enum {
 } stepper_status;
 
 typedef enum {
-    SERR_OK 										= 0,
-		SERR_MUSTBESTOPPED 					= 1,
-		SERR_NOMORESTATESAVAILABLE 	= 2,
-		SERR_STATENOTFOUND					= 3,
-		SERR_VALUETOOLOW						= 4,
-		SERR_VALUETOOHIGH						= 5
+    SERR_OK                     = 0,
+    SERR_NOMORESTATESAVAILABLE  = 1,
+    SERR_MUSTBESTOPPED          = 2,
+    SERR_STATENOTFOUND          = 3
 } stepper_error;
 
 typedef struct {
@@ -139,3 +138,7 @@ int32_t Stepper_GetAccSPS(char stepperName);
 // Gets the acceleration prescaler (the divider AccSPS). 
 // THREAD-SAFE (may be called at any time)
 int32_t Stepper_GetAccPrescaler(char stepperName);
+
+// Gets the current status of the stepper (if any)
+// THREAD-SAFE (may be called at any time)
+stepper_status Stepper_GetStatus(char stepperName);

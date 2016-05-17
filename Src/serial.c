@@ -33,13 +33,13 @@ static volatile uint8_t * rxPtr = rxBuffer;
 static volatile serial_status serialStatus;
 
 // ========================================== //
-//		TRANSMITTER															//
+//    TRANSMITTER                              //
 // ========================================== //
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
-	if (huart != &huart2)
-		return;
-	
+  if (huart != &huart2)
+    return;
+  
   if (serialStatus & SERIAL_TXOVERFLOW) {
       
       if (serialStatus & SERIAL_TXOVERFLOWMSG) {
@@ -54,7 +54,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
   serialStatus &= ~SERIAL_TX;
 
   txOutPtr = (txInSnapshot > txOutPtr) ? txInSnapshot : txBuffer;
-	
+  
   Serial_ExecutePendingTransmits();
 }
 
@@ -89,15 +89,13 @@ void Serial_ExecutePendingTransmits(void) {
   syncLock--;
 }
 
-
+/* C printf(...) support */
 int fputc(int ch, FILE *f) {
-	/* Send byte to USART */
-  
   if (serialStatus & SERIAL_TXOVERFLOW) return -1;
   
-	*txInPtr = (uint8_t)ch;
-	txInPtr++;
-	if (txInPtr == txBuffer+TX_BUFFER_SIZE) txInPtr = txBuffer;
+  *txInPtr = (uint8_t)ch;
+  txInPtr++;
+  if (txInPtr == txBuffer+TX_BUFFER_SIZE) txInPtr = txBuffer;
   if (txInPtr == txOutPtr) {
     serialStatus |= SERIAL_TXOVERFLOW;
   }
@@ -105,7 +103,7 @@ int fputc(int ch, FILE *f) {
   // Having this here means - that we might start separate DMA transfers to UART for each written bit separatelly
   // so for better performance - don't user printf(..), but use Serial_Write... methods
   // The use DMA ore efficiently, invoking it after the whole string has been put into the buffer
-	Serial_ExecutePendingTransmits();
+  Serial_ExecutePendingTransmits();
 
   return ch;
 }
@@ -127,7 +125,7 @@ void Serial_WriteBytes(uint8_t * data, uint32_t length) {
     }
   } while(++data < limit);
   
-	Serial_ExecutePendingTransmits();
+  Serial_ExecutePendingTransmits();
 }
 
 void Serial_WriteString(char * str){
@@ -162,22 +160,22 @@ void Serial_WriteInt(int32_t i) {
 }
 
 // ========================================== //
-//		RECEIVER																//
+//    RECEIVER                                //
 // ========================================== //
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-	if (huart != &huart2)
-		return;
-	
-	serialStatus &= ~SERIAL_RX;
-
-	while(rxPtr < rxBuffer+RX_BUFFER_SIZE) {
-		Serial_RxCallback(*rxPtr++);
-	}
+  if (huart != &huart2)
+    return;
   
-	rxPtr = rxBuffer;
+  serialStatus &= ~SERIAL_RX;
 
-	Serial_InitRxSequence();
+  while(rxPtr < rxBuffer+RX_BUFFER_SIZE) {
+    Serial_RxCallback(*rxPtr++);
+  }
+  
+  rxPtr = rxBuffer;
+
+  Serial_InitRxSequence();
 }
 
 void Serial_InitRxSequence(void) {
@@ -190,26 +188,21 @@ void Serial_CheckRxTimeout(void) {
   // This one executed by e timer with higher priority then DMA and UART interrupts
   // This might be invoked nested in HAL_UART_RxCpltCallback
 
-	int32_t bytesTransfered;
+  int32_t bytesTransfered;
   // we should not do anuthing if transmition stopped in HAL_UART_RxCpltCallback
-	if (!(serialStatus & SERIAL_RX)) {
-		return;
-	}
+  if (!(serialStatus & SERIAL_RX)) {
+    return;
+  }
 
   bytesTransfered = (RX_BUFFER_SIZE - huart2.hdmarx->Instance->NDTR);
 
-	while(rxPtr < rxBuffer+bytesTransfered) {
-		Serial_RxCallback(*rxPtr++);
-	}
+  while(rxPtr < rxBuffer+bytesTransfered) {
+    Serial_RxCallback(*rxPtr++);
+  }
 }
 
 __weak void Serial_RxCallback(uint8_t byte) {
-	// Test feedback
-	uint8_t byteArr[] = { byte };
- 	Serial_WriteBytes(byteArr, 1);
+  // Test feedback
+  uint8_t byteArr[] = { byte };
+   Serial_WriteBytes(byteArr, 1);
 }
-
-
-
-
-	

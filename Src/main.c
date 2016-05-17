@@ -37,7 +37,7 @@
 
 #include "stepperController.h"
 #include "serial.h"
-#define TEST
+//#define TEST
 
 /* USER CODE END Includes */
 
@@ -111,10 +111,10 @@ int main(void)
   STEP_TIMER_CLOCK = HAL_RCC_GetHCLKFreq();
   STEP_CONTROLLER_PERIOD_US =  1000000U /(HAL_RCC_GetHCLKFreq() / htim14.Init.Period);
   
-	Stepper_SetupPeripherals('X', &htim1, TIM_CHANNEL_3, GPIOB, GPIO_PIN_4);
+  Stepper_SetupPeripherals('X', &htim1, TIM_CHANNEL_3, GPIOB, GPIO_PIN_4);
   Stepper_SetupPeripherals('Y', &htim2, TIM_CHANNEL_2, GPIOB, GPIO_PIN_10);
   Stepper_SetupPeripherals('Z', &htim3, TIM_CHANNEL_2, GPIOA, GPIO_PIN_8);
-	
+  
   Stepper_InitDefaultState('X');
   Stepper_InitDefaultState('Y');
   Stepper_InitDefaultState('Z');
@@ -124,13 +124,13 @@ int main(void)
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
   __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);
 
-	Serial_InitRxSequence();
+  Serial_InitRxSequence();
 
-	HAL_Delay(1);
+  HAL_Delay(1);
   // This will run our StepController timer and enable interrupt for it as well
   HAL_TIM_Base_Start_IT(&htim14);
-	
-	printf("\r\n");
+  
+  printf("\r\n");
   printf ("============== Stepper Hub ==============\r\n");
   printf ("  CPU Clock: %d MHz StepperCtrl: %d us\r\n", STEP_TIMER_CLOCK/1000000, STEP_CONTROLLER_PERIOD_US);
   printf ("=========================================\r\n");
@@ -151,7 +151,7 @@ int main(void)
     if (Stepper_GetCurrentPosition('X') == 10) {   
         Stepper_SetTargetPosition('X', -10);
         Stepper_SetTargetPosition('Y', -5);
-        Stepper_SetTargetPosition('Z',	0);
+        Stepper_SetTargetPosition('Z',  0);
     }
     if (Stepper_GetCurrentPosition('X') == -10) {   
         Stepper_SetTargetPosition('X', 10);
@@ -160,7 +160,7 @@ int main(void)
     }
     
     // this will check how UART tollerates TX buffer overflow
-    // printf("PF %d\r\n", i++);
+    printf("PF %d\r\n", i++);
 #endif
     
     
@@ -496,7 +496,7 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void)
       __HAL_TIM_CLEAR_FLAG(&htim14, TIM_FLAG_UPDATE);
       
       Stepper_ExecuteAllControllers();
-			Serial_CheckRxTimeout();
+      Serial_CheckRxTimeout();
       
       HAL_GPIO_WritePin(GPIOA, LED_Pin, GPIO_PIN_RESET);
     }
