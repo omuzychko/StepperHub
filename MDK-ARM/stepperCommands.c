@@ -9,9 +9,9 @@ REQUEST STRUCTURE
     
   where
 
-    <command>      : add | set | get
+    <command>     : add | set | get
     
-    <stepper>       : x | y | z (or whatever single-letter names will be added in the future)
+    <stepper>     : x | y | z (or whatever single-letter names will be added in the future)
     
     [.parameter]  : parameter name (the field of the stepper_state structure)
     
@@ -30,7 +30,7 @@ REQUEST STRUCTURE
                                 .status
                                 .all
                             
-    [:value]       : any int32_t value (-2147483648 .. 2147483647) prefixed with colon, used with "add" or "set" request.
+    [:value]      : any int32_t value (-2147483648 .. 2147483647) prefixed with colon, used with "add" or "set" request.
 
   [.parameter] and/or [:value] might be omitted, so defaults will be used instead:
 
@@ -50,7 +50,7 @@ RESPONSE STRUCTURE
   
   where
     
-    <status>  : OK | OVERFLOW | ERROR
+    <status>  : OK | LIMIT | ERROR
     <info>    : command confirmation info (in case of successful "OK", or error code and description in case of error)
   
 EXAMPLES
@@ -172,6 +172,15 @@ typedef enum {
   true
 } bool;
 
+typedef enum {
+ SCERR_OK               = 0,
+ SCERR_VALUELIMIT       = 1,
+ SCERR_MUSTBESTOPPED    = 2,
+ SCERR_STEPPERNOTFOUND  = 3,
+ SCERR_INVALIDCMDPARAM  = 4,
+ SCERR_UNKNONWERROR     = 5
+}  stepper_command_error;
+
 typedef struct {
   volatile char               stepper;
   volatile request_commands   command;
@@ -193,30 +202,70 @@ void DecodeParam(uint8_t data);
 void DecodeValue(uint8_t data);
 
 int32_t GetParamValue(char stepper, request_params param) {
-  return 0;
+    switch (param) {
+        case PARAM_TARGETPOSITION:  return Stepper_GetTargetPosition(stepper);
+        case PARAM_CURRENTPOSITION: return Stepper_GetCurrentPosition(stepper);
+        case PARAM_MINSPS:          return Stepper_GetMinSPS(stepper);
+        case PARAM_MAXSPS:          return Stepper_GetMaxSPS(stepper);
+        case PARAM_CURRENTSPS:      return Stepper_GetCurrentSPS(stepper);
+        case PARAM_ACCSPS:          return Stepper_GetAccSPS(stepper);
+        case PARAM_ACCPRESCALER:    return Stepper_GetAccPrescaler(stepper);
+        case PARAM_STATUS:          return Stepper_GetStatus(stepper);
+        default:  return 0;
+    }
 }
 
 stepper_error SetParamValue(char stepper, request_params param, int32_t value) {
-  return SERR_OK;
+      switch (param) {
+        case PARAM_TARGETPOSITION:  return Stepper_SetTargetPosition(stepper, value);
+        case PARAM_CURRENTPOSITION: return Stepper_SetCurrentPosition(stepper, value);
+        case PARAM_MINSPS:          return Stepper_SetMinSPS(stepper, value);
+        case PARAM_MAXSPS:          return Stepper_SetMaxSPS(stepper, value);
+        case PARAM_ACCSPS:          return Stepper_SetAccSPS(stepper, value);
+        case PARAM_ACCPRESCALER:    return Stepper_SetAccPrescaler(stepper, value);
+        default:  return (stepper_error)0xFF; // codding error, will give "Unknown error" output
+    }
+}
+
+void PrintStepperStatusStr(stepper_status status) {
+  char * separator = "";
+  if (status & SS_STOPPED) {
+    printf("STOPPED");
+    separator = " | ";
+  }
+  if (status & SS_BREAKING) {
+    printf("%sBREAKING", separator);
+    separator = " | ";
+  }
+  if (status & SS_BREAKCORRECTION) {
+    printf("%sBREAKCORRECTION", separator);
+    separator = " | ";
+  }
+  if (status & SS_STARTING) {
+    printf("%sSTARTING", separator);
+    separator = " | ";
+  }
+  if (status & SS_RUNNING_BACKWARD) {
+    printf("%sRUNNING_BACKWARD", separator);
+    separator = " | ";
+  }
+  if (status & SS_RUNNING_FORWARD) {
+    printf("%sRUNNING_FORWARD", separator);
+  }
+  if (status == 0x00) {
+    printf("UNDEFINED");
+  }
 }
 
 void ExecuteCommand(void) {
-  // Try to detect overflow error by provided VALUE field.
-  bool isOverflow = false;
-  stepper_error error = SERR_OK;
-  if (req.isNegativeValue) {
-    req.value = -req.value;
-    if (req.value < INT32_MIN) {
-      req.value = INT32_MIN;
-      isOverflow = true;
-    }
-  } else if (req.value > INT32_MAX) {
-    req.value = INT32_MAX;
-    isOverflow = true;
-  }
-  
+  stepper_error setResult = SERR_OK;
+  stepper_command_error error = SCERR_OK;
+  int64_t value = (req.isNegativeValue) ? -req.value : req.value;
+
+  // TRY EXECUTE COMMAND
+    
   if (req.stepper == '\0') {
-    printf("ERROR - %d Stepper not found.", SERR_STATENOTFOUND);
+    error = SCERR_STEPPERNOTFOUND;
   } else {
     switch (req.command) {
       case CMD_UNKNOWN:
@@ -224,44 +273,129 @@ void ExecuteCommand(void) {
         printf("ERROR -  Program error in commands decoder.");
         break;
       case CMD_ADD:
-        if (req.parameter == PARAM_UNDEFINED)
-          req.parameter = PARAM_TARGETPOSITION;
       case CMD_SET:
+        // VALIDATION
+        if (req.parameter == PARAM_CURRENTSPS ||
+            req.parameter == PARAM_STATUS || 
+            req.parameter == PARAM_ALL) {
+            error = SCERR_INVALIDCMDPARAM;
+            break;
+        }
+        // DEFAULTING
         if (req.parameter == PARAM_UNDEFINED)
           req.parameter = PARAM_TARGETPOSITION;
+        // EXECUTION
+        if (req.command == CMD_ADD) {
+            value += GetParamValue(req.stepper, req.parameter) + value;
+        }
+        if (value < INT32_MIN) {
+            value = INT32_MIN;
+            error = SCERR_VALUELIMIT;
+        }
+        if (value > INT32_MAX) {
+            value = INT32_MAX;
+            error = SCERR_VALUELIMIT;
+        }        
+        setResult = SetParamValue(req.stepper, req.parameter, value);
         break;
       case CMD_RESET:
+        // VALIDATION
+        if (!(Stepper_GetStatus(req.stepper) & SS_STOPPED)){
+            error = SCERR_MUSTBESTOPPED;
+            break;
+        }
+        // DEFAULTING
+        // Undefined parameter in RESET command means - reset everything!
         if (req.parameter == PARAM_UNDEFINED)
-          req.parameter = PARAM_ALL;
+            req.parameter = PARAM_ALL;
+        // current position and target position must be reset at the same time
+        // writing to current position - rewrites target position with the same value
+        if (req.parameter == PARAM_TARGETPOSITION)
+            req.parameter = PARAM_CURRENTPOSITION;
+        // EXECUTIONG
+        switch (req.parameter) {
+            case PARAM_ALL:
+                setResult = Stepper_InitDefaultState(req.stepper);
+                break;
+            case PARAM_ACCPRESCALER:
+                setResult = Stepper_SetAccPrescaler(req.stepper, 1);
+                break;
+            case PARAM_ACCSPS:
+                setResult = Stepper_SetAccSPS(req.stepper, MIN_SPS);
+                break;
+            case PARAM_MINSPS:
+                setResult = Stepper_SetMinSPS(req.stepper, MIN_SPS);
+                break;
+            case PARAM_MAXSPS:
+                setResult = Stepper_SetMinSPS(req.stepper, MAX_SPS);
+                break;
+            case PARAM_CURRENTPOSITION:
+                setResult = Stepper_SetCurrentPosition(req.stepper, MAX_SPS);
+                break;
+            case PARAM_CURRENTSPS:
+            case PARAM_STATUS:
+                error = SCERR_INVALIDCMDPARAM;
+                break;
+            default:
+                error = SCERR_UNKNONWERROR;
+                break;
+        }
         break;
       case CMD_GET:
         if (req.parameter == PARAM_UNDEFINED)
           req.parameter = PARAM_CURRENTPOSITION;
+        if (req.parameter != PARAM_ALL)
+          value = GetParamValue(req.stepper, req.parameter);
         break;
     }
   }
   
-  if (error) {
+  // PRINT RESPONSE
+  
+  switch (setResult) {
+    case SERR_OK: break;
+    case SERR_LIMIT: 
+        // read the value limit being set
+        value = GetParamValue(req.stepper, req.parameter);
+        error = SCERR_VALUELIMIT;
+        break;
+    case SERR_STATENOTFOUND:    error = SCERR_STEPPERNOTFOUND; break; // this is unlikely to happen, since we check while decoding
+    case SERR_MUSTBESTOPPED:    error = SCERR_MUSTBESTOPPED; break;
+    default:                    error = SCERR_UNKNONWERROR; break;
+  }
+  
+  if (error == SCERR_VALUELIMIT) {
+      printf("LIMIT - %c.%s = %d\r\n", req.stepper, request_params_arry[req.parameter], (int32_t)req.value);
+  } else if (error) {
     char * errorStr;
     switch(error) {
-      case SERR_MUSTBESTOPPED : errorStr = "Stepper must be STOPPED to execute this command."; break;
-      case SERR_STATENOTFOUND : errorStr = "No stepper found with specified name."; break;
-      default: errorStr = "Unknown error or invalid command."; break;
+        case SCERR_MUSTBESTOPPED    : errorStr = "Stepper must be STOPPED to execute this command."; break;
+        case SCERR_STEPPERNOTFOUND  : errorStr = "No stepper with specified label."; break;
+        case SCERR_INVALIDCMDPARAM  : errorStr = "Invalid command parameter."; break; 
+        default                     : errorStr = "Unknown error."; break;
     }
     printf("ERROR - %d %s\r\n", error, errorStr);
-  } else if (isOverflow) {
-    printf("OVERFLOW - %c.%s = %d\r\n", req.stepper, request_params_arry[req.parameter], (int32_t)req.value);
   } else {
     printf("OK - %c", req.stepper);
     if (req.parameter == PARAM_ALL) {
-      // start with whatever goes after PARAM_ALL
-      request_params param = (request_params)(PARAM_ALL + 1);
-      do {
-        printf("\t.%s = %d\r\n", request_params_arry[param], GetParamValue(req.stepper, param));
-      } while (param < PARAM_COUNT);
-      
+        // start with whatever goes after PARAM_ALL
+        request_params param = (request_params)(PARAM_ALL + 1);
+        do {
+            value = GetParamValue(req.stepper, param);
+            printf("\t.%s = %d", request_params_arry[param], (int32_t)value);
+            if (param == PARAM_STATUS) {
+                printf(" ");
+                PrintStepperStatusStr((stepper_status)value);
+            }
+            printf("\r\n");
+        } while (param < PARAM_COUNT);
     } else {
-      printf(".%s = %d\r\n", request_params_arry[req.parameter], (int32_t)req.value);
+        printf(".%s = %d", request_params_arry[req.parameter], (int32_t)value);
+        if (req.parameter == PARAM_STATUS) {
+            printf(" ");
+            PrintStepperStatusStr((stepper_status)value);
+        }
+        printf("\r\n");
     }
   }
   

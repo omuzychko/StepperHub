@@ -1,5 +1,8 @@
 #include "stm32f4xx_hal.h"
 
+#define MIN_SPS 1
+#define MAX_SPS 400000
+
 typedef enum {
     SS_UNDEFINED         = 0x00,
     SS_RUNNING_BACKWARD  = 0x01,
@@ -14,7 +17,8 @@ typedef enum {
     SERR_OK                     = 0,
     SERR_NOMORESTATESAVAILABLE  = 1,
     SERR_MUSTBESTOPPED          = 2,
-    SERR_STATENOTFOUND          = 3
+    SERR_STATENOTFOUND          = 3,
+    SERR_LIMIT                  = 4
 } stepper_error;
 
 typedef struct {
@@ -130,6 +134,10 @@ int32_t Stepper_GetMinSPS(char stepperName);
 // Gets the maximum stepper speed (steps-per-second).
 // THREAD-SAFE (may be called at any time)
 int32_t Stepper_GetMaxSPS(char stepperName);
+
+// Gets the current stepper speed (steps-per-second).
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetCurrentSPS(char stepperName);
 
 // Gets the acceleration, as factor of (STEP_CONTROLLER_PERIOD_US*10^6) steps/second^2.
 // THREAD-SAFE (may be called at any time)

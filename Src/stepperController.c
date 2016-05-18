@@ -2,8 +2,6 @@
 #include "stepperController.h"
 #include "serial.h"
 
-#define MIN_SPS 1
-#define MAX_SPS 400000
 #define MAX_STEPPERS_COUNT 10
 
 static stepper_state steppers[MAX_STEPPERS_COUNT];
@@ -262,11 +260,12 @@ stepper_error Stepper_SetCurrentPosition(char stepperName, int32_t value){
   stepper_state * stepper = GetState(stepperName);
   if (stepper == NULL)
     return SERR_STATENOTFOUND;
-  if (!(stepper->status&SS_STOPPED))
-    return SERR_MUSTBESTOPPED;
-  stepper->targetPosition  = 
-  stepper->currentPosition = value;
-  return SERR_OK;
+  if (stepper->status & SS_STOPPED) {
+    stepper->targetPosition  = 
+    stepper->currentPosition = value;
+    return SERR_OK;
+  }
+  return SERR_MUSTBESTOPPED;
 }
 
 // Sets the minimum stepper speed (steps-per-second). 
@@ -277,21 +276,27 @@ stepper_error Stepper_SetMinSPS(char stepperName, int32_t value){
   stepper_state * stepper = GetState(stepperName);
   if (stepper == NULL)
     return SERR_STATENOTFOUND;
-  if (!(stepper->status&SS_STOPPED))
-    return SERR_MUSTBESTOPPED;
-  
-  if (value > MAX_SPS)
-    stepper->minSPS = stepper->currentSPS = MAX_SPS;
-  else if (value < MIN_SPS)
-    stepper->minSPS = stepper->currentSPS = MIN_SPS;
-  else
-    stepper->minSPS = stepper->currentSPS = value;
-  
-  if (stepper->minSPS > stepper->maxSPS)
-    stepper->maxSPS = stepper->minSPS;
-
-  UpdateStepTimerToCurrentSPS(stepper);
-  return SERR_OK;
+  if (stepper->status&SS_STOPPED) {
+      stepper_error result = SERR_OK;
+      if (value > MAX_SPS) {
+        stepper->minSPS = stepper->currentSPS = MAX_SPS;
+        result = SERR_LIMIT;
+      }
+      else if (value < MIN_SPS) {
+        stepper->minSPS = stepper->currentSPS = MIN_SPS;
+        result = SERR_LIMIT;
+      }
+      else {
+        stepper->minSPS = stepper->currentSPS = value;
+      }
+      
+      if (stepper->minSPS > stepper->maxSPS)
+        stepper->maxSPS = stepper->minSPS;
+      
+      UpdateStepTimerToCurrentSPS(stepper);
+      return result;
+  }
+  return SERR_MUSTBESTOPPED;
 }
 
 // Sets the maximum stepper speed (steps-per-second).
@@ -302,20 +307,26 @@ stepper_error Stepper_SetMaxSPS(char stepperName, int32_t value){
   stepper_state * stepper = GetState(stepperName);
   if (stepper == NULL)
     return SERR_STATENOTFOUND;
-  if (!(stepper->status&SS_STOPPED))
-    return SERR_MUSTBESTOPPED;
-  
-  if (value > MAX_SPS)
-    stepper->maxSPS = MAX_SPS;
-  else if (value < MIN_SPS)
-    stepper->maxSPS = MIN_SPS;
-  else
-    stepper->maxSPS = value;
-  
-  if (stepper->minSPS > stepper->maxSPS)
-    stepper->minSPS = stepper->currentSPS = stepper->maxSPS;
-  
-  return SERR_OK;
+  if (stepper->status & SS_STOPPED) {
+      stepper_error result = SERR_OK;
+      if (value > MAX_SPS) {
+        stepper->maxSPS = MAX_SPS;
+        result = SERR_LIMIT;
+      }
+      else if (value < MIN_SPS) {
+        stepper->maxSPS = MIN_SPS;
+        result = SERR_LIMIT;
+      }
+      else {
+        stepper->maxSPS = value;
+      }
+      
+      if (stepper->minSPS > stepper->maxSPS)
+        stepper->minSPS = stepper->currentSPS = stepper->maxSPS;
+      
+      return result;
+  }
+  return SERR_MUSTBESTOPPED;
 }
 
 // Sets the acceleration, as factor of (STEP_CONTROLLER_PERIOD_US*10^6) steps/second^2.
@@ -326,17 +337,19 @@ stepper_error Stepper_SetAccSPS(char stepperName, int32_t value){
   stepper_state * stepper = GetState(stepperName);
   if (stepper == NULL)
     return SERR_STATENOTFOUND;
-  if (!(stepper->status&SS_STOPPED))
-    return SERR_MUSTBESTOPPED;
-  
-  if (value > MAX_SPS)
-    stepper->accelerationSPS = MAX_SPS;
-  else if (value < MIN_SPS)
-    stepper->accelerationSPS = MIN_SPS;
-  else
+  if (stepper->status & SS_STOPPED) {
+    if (value > MAX_SPS) {
+        stepper->accelerationSPS = MAX_SPS;
+        return SERR_LIMIT;
+    }
+    if (value < MIN_SPS) {
+        stepper->accelerationSPS = MIN_SPS;
+        return SERR_LIMIT;
+    }
     stepper->accelerationSPS = value;
-  
-  return SERR_OK;
+    return SERR_OK;
+  }
+  return SERR_MUSTBESTOPPED;
 }
 
 // Sets the acceleration prescaler (the divider AccSPS). 
@@ -346,10 +359,11 @@ stepper_error Stepper_SetAccPrescaler(char stepperName, int32_t value){
   stepper_state * stepper = GetState(stepperName);
   if (stepper == NULL)
     return SERR_STATENOTFOUND;
-  if (!(stepper->status&SS_STOPPED))
-    return SERR_MUSTBESTOPPED;
-  stepper->stepCtrlPrescaller = (value < 1) ? 1 : value;
-  return SERR_OK;
+  if (stepper->status & SS_STOPPED) {
+    stepper->stepCtrlPrescaller = (value < 1) ? 1 : value;
+    return  (value < 1) ? SERR_LIMIT : SERR_OK;
+  }
+  return SERR_MUSTBESTOPPED;
 }
 
 
@@ -379,6 +393,13 @@ int32_t Stepper_GetMinSPS(char stepperName){
 int32_t Stepper_GetMaxSPS(char stepperName){
   stepper_state * stepper = GetState(stepperName);
   return  (stepper == NULL) ? 0 : stepper->maxSPS;
+}
+
+// Gets the current stepper speed (steps-per-second).
+// THREAD-SAFE (may be called at any time)
+int32_t Stepper_GetCurrentSPS(char stepperName){
+  stepper_state * stepper = GetState(stepperName);
+  return  (stepper == NULL) ? 0 : stepper->currentSPS;
 }
 
 // Gets the acceleration, as factor of (STEP_CONTROLLER_PERIOD_US*10^6) steps/second^2.
