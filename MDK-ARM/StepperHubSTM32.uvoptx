@@ -151,7 +151,7 @@
           <Type>0</Type>
           <LineNumber>1734</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134228340</Address>
+          <Address>134234144</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -167,7 +167,7 @@
           <Type>0</Type>
           <LineNumber>912</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134225158</Address>
+          <Address>134229302</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -183,12 +183,27 @@
         <Ww>
           <count>0</count>
           <WinNumber>1</WinNumber>
-          <ItemText>huart</ItemText>
+          <ItemText>stepper</ItemText>
         </Ww>
         <Ww>
           <count>1</count>
           <WinNumber>1</WinNumber>
-          <ItemText>serialStatus</ItemText>
+          <ItemText>(float)s0</ItemText>
+        </Ww>
+        <Ww>
+          <count>2</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>estimatedTimeToTarget</ItemText>
+        </Ww>
+        <Ww>
+          <count>3</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>spsSwitches</ItemText>
+        </Ww>
+        <Ww>
+          <count>4</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>fAccSPS</ItemText>
         </Ww>
       </WatchWindow1>
       <Tracepoint>

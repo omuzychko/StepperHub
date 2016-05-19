@@ -40,7 +40,7 @@ typedef struct {
     // If stepper is running - Decremented by 1 on each StepControllerTimer interrupt
     // When equals 0 - stepper timmer gets switched to the next speed (accelerated or decelerated)
     // When reaches 0 gets reloaded with "stepControllerPeriod"
-    uint32_t    stepCtrlPrescallerTicks;
+    volatile uint32_t    stepCtrlPrescallerTicks;
     
     // fastest possible speed for this stepper (starting speed from SS_STOPPED)
     volatile uint32_t    minSPS;

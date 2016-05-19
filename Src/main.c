@@ -36,6 +36,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "stepperController.h"
+#include "stepperCommands.h"
 #include "serial.h"
 //#define TEST
 
@@ -86,6 +87,7 @@ int main(void)
 #if defined (TEST) 
   int i =0;
 #endif
+  stepper_request stReq =  {'\0', CMD_GET, PARAM_ALL, 0, false};
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -135,6 +137,13 @@ int main(void)
   printf ("  CPU Clock: %d MHz StepperCtrl: %d us\r\n", STEP_TIMER_CLOCK/1000000, STEP_CONTROLLER_PERIOD_US);
   printf ("=========================================\r\n");
 
+  // TODO: load settingsfrom FLASH
+  stReq.stepper = 'X';
+  ExecuteRequest(&stReq);
+  stReq.stepper = 'Y';
+  ExecuteRequest(&stReq);
+  stReq.stepper = 'Z';
+  ExecuteRequest(&stReq);
 #if defined (TEST) 
 
   Stepper_SetTargetPosition('X',10);

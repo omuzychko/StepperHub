@@ -2,36 +2,53 @@
 #include "stepperController.h"
 #include "serial.h"
 
-#define MAX_STEPPERS_COUNT 10
+#define MAX_STEPPERS_COUNT       10
+#define ACCSPS_TO_MINSPS_RATIO   0.8f
 
 static stepper_state steppers[MAX_STEPPERS_COUNT];
 static uint32_t initializedSteppersCount;
 
-stepper_state * GetState(char stepperName) {
-  int32_t i = initializedSteppersCount;
-  
-  if (i == 0)
-    return NULL;
-  
-  while(i--){
-    if (steppers[i].name == stepperName)
-      return &steppers[i];
-  }
-  
-  // if nothing found - take the default very first stepper in the collection
-  return (stepper_state *)NULL;
+void SetAccelerationByMinSPS(stepper_state * stepper) {
+    // MinSPS - is a maximum possible starting stepper speed, so it also defines maximum possible acceleration
+    // Lets assume that accual acceleration should be at 80% level of minimum starting speed (ACCSPS_TO_MINSPS_RATIO).
+    
+    // We have stepper controler clock which defines how often we can update the CurrentSPS
+    // Lets get the floating point AccSPS value first, if we would update it every ACCSPS_TO_MINSPS_RATIO
+    float fAccSPS = ACCSPS_TO_MINSPS_RATIO * STEP_CONTROLLER_PERIOD_US * stepper->minSPS / 1000000.0f;
+    
+    // But we can't update SPS by floating point value,
+    // this steppers controller alghoritm using int32_t arifmetics to control CurrentSPS
+    // Translating the floating point acceleration value into "Prescaller + discreete AccSPS"
+    // allows to use CPU time more effectively, without unncessary frequent updates 
+    // of Stepping Timer pulse frequency on every tick of controller clock (STEP_CONTROLLER_PERIOD_US).
+
+    if (fAccSPS > 10.0f) {
+        stepper->stepCtrlPrescallerTicks =
+        stepper->stepCtrlPrescaller = 1;
+        stepper->accelerationSPS = fAccSPS; // In worst case scenario, like 10.99 we will get 10% less (0.99 out of almost 11.00) acceleration     
+    } else {
+        // Here it is better to use prescaller
+        uint32_t prescalerValue = 1;
+        float prescaledAccSPS = fAccSPS;
+        float remainder = prescaledAccSPS - (uint32_t)prescaledAccSPS;
+        
+        while (prescaledAccSPS < 0.9f || (0.1f < remainder & remainder < 0.9f)) {
+            prescalerValue++;
+            prescaledAccSPS += fAccSPS;
+            remainder = prescaledAccSPS - (uint32_t)prescaledAccSPS;
+        } 
+
+        stepper->stepCtrlPrescallerTicks =
+        stepper->stepCtrlPrescaller = prescalerValue;
+        stepper -> accelerationSPS = prescaledAccSPS;
+        
+        // Round up if at upper remainder
+        if (remainder > 0.9f)
+            stepper -> accelerationSPS += 1;
+    }
 }
 
-int32_t GetStepDirectionUnit(stepper_state * stepper){
-    return (stepper->status & SS_RUNNING_BACKWARD) ? -1 : 1;
-}
-
-int32_t GetStepsToTarget(stepper_state * stepper) {
-    // returns absolute value of steps left to target
-    return GetStepDirectionUnit(stepper) * (stepper->targetPosition - stepper->currentPosition);
-}
-
-void UpdateStepTimerToCurrentSPS(stepper_state * stepper){
+void SetStepTimerByCurrentSPS(stepper_state * stepper){
   if (stepper -> STEP_TIMER != NULL && stepper -> STEP_TIMER -> Instance != NULL){
     TIM_TypeDef * timer = stepper -> STEP_TIMER -> Instance;
     uint32_t prescaler = 0;
@@ -51,15 +68,39 @@ void UpdateStepTimerToCurrentSPS(stepper_state * stepper){
 void DecrementSPS(stepper_state * stepper){
     if (stepper -> currentSPS > stepper -> minSPS){
         stepper -> currentSPS -=  stepper -> accelerationSPS;
-        UpdateStepTimerToCurrentSPS(stepper);
+        SetStepTimerByCurrentSPS(stepper);
     }
 }
 
 void IncrementSPS(stepper_state * stepper){
     if (stepper -> currentSPS < stepper -> maxSPS) {
         stepper -> currentSPS +=  stepper -> accelerationSPS;
-        UpdateStepTimerToCurrentSPS(stepper);
+        SetStepTimerByCurrentSPS(stepper);
     }
+}
+
+stepper_state * GetState(char stepperName) {
+  int32_t i = initializedSteppersCount;
+  
+  if (i == 0)
+    return NULL;
+  
+  while(i--){
+    if (steppers[i].name == stepperName)
+      return &steppers[i];
+  }
+  
+  // if nothing found - take the default very first stepper in the collection
+  return (stepper_state *)NULL;
+}
+
+int32_t GetStepDirectionUnit(stepper_state * stepper){
+    return (stepper->status & SS_RUNNING_BACKWARD) ? (-1) : (1);
+}
+
+uint32_t GetStepsToTarget(stepper_state * stepper) {
+    // returns absolute value of steps left to target
+    return ((int64_t)GetStepDirectionUnit(stepper)) * ((int64_t)stepper->targetPosition - (int64_t)stepper->currentPosition);
 }
 
 stepper_error Stepper_SetupPeripherals(char stepperName, TIM_HandleTypeDef * stepTimer, uint32_t stepChannel, GPIO_TypeDef  * dirGPIO, uint16_t dirPIN){
@@ -69,6 +110,7 @@ stepper_error Stepper_SetupPeripherals(char stepperName, TIM_HandleTypeDef * ste
         if (initializedSteppersCount == MAX_STEPPERS_COUNT) return SERR_NOMORESTATESAVAILABLE;
         stepper = &steppers[initializedSteppersCount++];
         stepper -> name = stepperName;
+        stepper -> status = SS_STOPPED;
     } else if (!(stepper->status & SS_STOPPED)) {
         return SERR_MUSTBESTOPPED;
     }
@@ -92,6 +134,7 @@ stepper_error Stepper_InitDefaultState(char stepperName) {
         if (initializedSteppersCount == MAX_STEPPERS_COUNT) return SERR_NOMORESTATESAVAILABLE;
         stepper = &steppers[initializedSteppersCount++];
         stepper -> name = stepperName;
+        stepper -> status = SS_STOPPED;
     } else if (!(stepper->status & SS_STOPPED)) {
         return SERR_MUSTBESTOPPED;
     }
@@ -99,23 +142,14 @@ stepper_error Stepper_InitDefaultState(char stepperName) {
     stepper -> minSPS                   = MIN_SPS;       // this is like an hour or two per turn in microstepping mode
     stepper -> maxSPS                   = MAX_SPS;  // 400kHz is 2.5uS per step, while theoretically possible limit for A4988 dirver is 2uS
     stepper -> currentSPS               = stepper -> minSPS;
-    stepper -> accelerationSPS          = stepper -> minSPS;
-
-    // minimum starting sppeed depends on inertia
-    // so take how many microseconds we have per step at minimum speed,
-    // and divide it by the minimum controller period
-    stepper -> stepCtrlPrescaller       = 1;// + ((1000000u / (stepper -> minSPS+stepper -> accelerationSPS+1)) / STEP_CONTROLLER_PERIOD_US);
-    stepper -> stepCtrlPrescallerTicks  = stepper -> stepCtrlPrescaller;
-
 
     // zero service fields
     stepper -> targetPosition           = 0;
     stepper -> currentPosition          = 0;
     stepper -> breakInitiationSPS       = stepper -> maxSPS;
 
-    stepper -> status = SS_STOPPED;
-
-    UpdateStepTimerToCurrentSPS(stepper);
+    SetAccelerationByMinSPS(stepper);
+    SetStepTimerByCurrentSPS(stepper);
 
     return SERR_OK;
 }
@@ -219,7 +253,7 @@ void Stepper_PulseTimerUpdate(char stepperName){
       stepper->currentPosition += GetStepDirectionUnit(stepper);
       stepsToTarget = GetStepsToTarget(stepper) ;
 
-      if (stepsToTarget < 0 || (stepsToTarget > 0 && stepper->currentSPS == stepper->minSPS)) {
+      if (stepsToTarget < 0 || (stepsToTarget > 0 && stepper->currentSPS <= stepper->minSPS)) {
         // TODO: SEND BREAKING UNDER/OVER-ESTIMATION ERROR REPORT
       }
       if (stepsToTarget <= 0 && stepper -> currentSPS == stepper -> minSPS) {
@@ -293,7 +327,8 @@ stepper_error Stepper_SetMinSPS(char stepperName, int32_t value){
       if (stepper->minSPS > stepper->maxSPS)
         stepper->maxSPS = stepper->minSPS;
       
-      UpdateStepTimerToCurrentSPS(stepper);
+      SetAccelerationByMinSPS(stepper);
+      SetStepTimerByCurrentSPS(stepper);
       return result;
   }
   return SERR_MUSTBESTOPPED;
@@ -321,8 +356,11 @@ stepper_error Stepper_SetMaxSPS(char stepperName, int32_t value){
         stepper->maxSPS = value;
       }
       
-      if (stepper->minSPS > stepper->maxSPS)
+      if (stepper->minSPS > stepper->maxSPS) {
         stepper->minSPS = stepper->currentSPS = stepper->maxSPS;
+        SetAccelerationByMinSPS(stepper);
+        SetStepTimerByCurrentSPS(stepper);
+      }
       
       return result;
   }
