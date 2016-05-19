@@ -10,9 +10,9 @@ REQUEST STRUCTURE
     
   where
 
-    <command>     : add | set | get
+    <command>     : add | set | reset | get
     
-    <stepper>     : x | y | z (or whatever single-letter names will be added in the future)
+    <stepper>     : X | Y | Z (or whatever single-letter names will be added in the future)
     
     [.parameter]  : parameter name (the field of the stepper_state structure)
     
@@ -41,12 +41,11 @@ REQUEST STRUCTURE
     - when the [:value] is omitted: 
         0 assumed by default (for all commands)
         
-  ".currentSPS" and  parameter may be used with "get" command only, "set" or "get" attempts will give erro
-  [:value] makes no sense for "get" command, so will be ignored in this case.
+  [:value] makes no sense for "get" and "reset" command, so will be ignored in this case.
 
 RESPONSE STRUCTURE
 
-    <status> - <info>
+    <status> - <code|stepper><info>
   
   where
     
