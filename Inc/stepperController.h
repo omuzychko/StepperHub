@@ -1,7 +1,13 @@
 #include "stm32f4xx_hal.h"
 
-#define MIN_SPS 1
-#define MAX_SPS 400000
+
+// We user the last small 16kB FLASH_SECTOR_3 to store the config data.
+
+#define ADDR_FLASH_SECTOR_3     ((uint32_t)0x0800C000)
+#define MAX_STEPPERS_COUNT       10
+#define ACCSPS_TO_MINSPS_RATIO   0.8f
+#define DEFAULT_MIN_SPS 1
+#define DEFAULT_MAX_SPS 400000
 
 typedef enum {
     SS_UNDEFINED         = 0x00,
@@ -34,30 +40,30 @@ typedef struct {
     // this is starting value for stepCtrlPrescallerTicks, 
     // it basically defines the period of swithcing to the next speed
     // as a number of StepperControl timer interrupts
-    uint32_t    stepCtrlPrescaller;
+    volatile int32_t    stepCtrlPrescaller;
     
     // StepControllerTimer ticks left to next SPS update 
     // If stepper is running - Decremented by 1 on each StepControllerTimer interrupt
     // When equals 0 - stepper timmer gets switched to the next speed (accelerated or decelerated)
     // When reaches 0 gets reloaded with "stepControllerPeriod"
-    volatile uint32_t    stepCtrlPrescallerTicks;
+    volatile int32_t    stepCtrlPrescallerTicks;
     
     // fastest possible speed for this stepper (starting speed from SS_STOPPED)
-    volatile uint32_t    minSPS;
+    volatile int32_t    minSPS;
     
     // slowest possible speed for this stepper (starting speed from SS_STOPPED)
-    volatile uint32_t    maxSPS;
+    volatile int32_t    maxSPS;
     
     // How many SPS will be added/removed to/from current on each invokation of StepController (when stepCtrlPrescallerTicks = 0)
-    volatile uint32_t    accelerationSPS;
+    volatile int32_t    accelerationSPS;
     
     // speed at the moment we began to slowdown the stepper 
     // used to re-estimatimate breaking sequence when speed gets reduced twice
     // at high SPS rate estimation might be too uncertain
-    volatile uint32_t   breakInitiationSPS;
+    volatile int32_t   breakInitiationSPS;
     
     // current speed time which can be lower than or equal to StartStepTime
-    volatile uint32_t    currentSPS;
+    volatile int32_t    currentSPS;
     
     // where do we go?
     volatile int32_t     targetPosition;
@@ -150,3 +156,13 @@ int32_t Stepper_GetAccPrescaler(char stepperName);
 // Gets the current status of the stepper (if any)
 // THREAD-SAFE (may be called at any time)
 stepper_status Stepper_GetStatus(char stepperName);
+
+// Loads configuration of all steppers (MinSPS/Max/AccSPS/AccPrescaler) 
+// from FLASH memeory (Sector 1)
+void Stepper_LoadConfig(void);
+
+// Saves configuration of all steppers (MinSPS/Max/AccSPS/AccPrescaler) 
+// to FLASH memeory (Sector 1)
+void Stepper_SaveConfig(void);  
+
+

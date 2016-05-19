@@ -113,15 +113,28 @@ int main(void)
   STEP_TIMER_CLOCK = HAL_RCC_GetHCLKFreq();
   STEP_CONTROLLER_PERIOD_US =  1000000U /(HAL_RCC_GetHCLKFreq() / htim14.Init.Period);
   
+  
+  printf("\r\n");
+  printf ("============== Stepper Hub ==============\r\n");
+  printf ("  CPU Clock: %d MHz StepperCtrl: %d us\r\n", STEP_TIMER_CLOCK/1000000, STEP_CONTROLLER_PERIOD_US);
+  printf ("=========================================\r\n\r\n");
+  
   Stepper_SetupPeripherals('X', &htim1, TIM_CHANNEL_3, GPIOB, GPIO_PIN_4);
   Stepper_SetupPeripherals('Y', &htim2, TIM_CHANNEL_2, GPIOB, GPIO_PIN_10);
   Stepper_SetupPeripherals('Z', &htim3, TIM_CHANNEL_2, GPIOA, GPIO_PIN_8);
   
-  Stepper_InitDefaultState('X');
-  Stepper_InitDefaultState('Y');
-  Stepper_InitDefaultState('Z');
-
-
+  printf("Reading settings from internal storage...\r\n");
+  Stepper_LoadConfig();
+  
+  if (Stepper_GetAccPrescaler('Z') == 0xFFFFFFFF) {
+    printf("Storage is clean, initializing defaults ...\r\n");
+    Stepper_InitDefaultState('X');
+    Stepper_InitDefaultState('Y');
+    Stepper_InitDefaultState('Z');
+    Stepper_SaveConfig();
+  }
+  printf("DONE!\r\n\r\n");
+  
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
   __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);
@@ -132,10 +145,6 @@ int main(void)
   // This will run our StepController timer and enable interrupt for it as well
   HAL_TIM_Base_Start_IT(&htim14);
   
-  printf("\r\n");
-  printf ("============== Stepper Hub ==============\r\n");
-  printf ("  CPU Clock: %d MHz StepperCtrl: %d us\r\n", STEP_TIMER_CLOCK/1000000, STEP_CONTROLLER_PERIOD_US);
-  printf ("=========================================\r\n");
 
   // TODO: load settingsfrom FLASH
   stReq.stepper = 'X';
@@ -171,10 +180,6 @@ int main(void)
     // this will check how UART tollerates TX buffer overflow
     printf("PF %d\r\n", i++);
 #endif
-    
-    
-     
-
 
   /* USER CODE END WHILE */
 

@@ -1,7 +1,7 @@
 #include <string.h>
+#include "stepperCommands.h"
 #include "stepperController.h"
 #include "serial.h"
-#include "stepperCommands.h"
 
 /*
 REQUEST STRUCTURE
@@ -284,15 +284,16 @@ void ExecuteRequest(stepper_request * r) {
         switch (parameter) {
             case PARAM_ALL:
                 setResult = Stepper_InitDefaultState(stepper);
+                Stepper_SaveConfig();
                 break;
             case PARAM_MINSPS:
-                setResult = Stepper_SetMinSPS(stepper, MIN_SPS);
+                setResult = Stepper_SetMinSPS(stepper, DEFAULT_MIN_SPS);
                 break;
             case PARAM_MAXSPS:
-                setResult = Stepper_SetMinSPS(stepper, MAX_SPS);
+                setResult = Stepper_SetMaxSPS(stepper, DEFAULT_MAX_SPS);
                 break;
             case PARAM_CURRENTPOSITION:
-                setResult = Stepper_SetCurrentPosition(stepper, MAX_SPS);
+                setResult = Stepper_SetCurrentPosition(stepper, 0);
                 break;
             case PARAM_ACCSPS:
             case PARAM_ACCPRESCALER:
