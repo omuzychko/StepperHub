@@ -127,9 +127,9 @@ where
       
   RESPONSE
       
-      LIMIT - Z.MINSPS = 1
+      LIMIT - X.MINSPS = 1
       
-  No value provided means that we were trying to set 0 value to the minSPS paramer, so minSPS has been reduced to the minimum posible value
+  No value provided means that we were trying to set 0 value to the **minSPS** paramer, so **minSPS** has been reduced to the minimum posible value.
 
   -------------------------------------------
   
@@ -140,8 +140,10 @@ where
   RESPONSE
       
       OK - Z.TARGETPOSITION = 7052800
-
-    -------------------------------------------
+      
+  If motor was STOPPED - it will start rotating. And it will stop when ***currentPosition** will become equal to **targetPostion**.
+  
+  -------------------------------------------
   
   REQUEST
     
@@ -150,7 +152,9 @@ where
   RESPONSE
       
       OK - Z.CURRENTPOSITION = 3381833
-
+  
+  Providing no pearameter with **get** command will give you the currrent position of the motor.
+  
   -------------------------------------------
   
   REQUEST
@@ -175,5 +179,4 @@ where
 
 ####Generating code with CubeMX project will give you an error message. Now worries - its OK!
 
-I've have overclocked CPU to 200MHz to get simpler calculations of timing parameters, so easier to debug. Its just about 10% over spec. Playing with overclocking I was able to run this poor CPU at 280 MHz, getting close to 50MHz flipping GPIO PIN in a loop.
-
+I've have overclocked CPU to 200MHz to get simpler calculations of timing parameters, so easier to debug. Its just about 10% over spec. While expirimenting I was able to run this poor CPU at 280 MHz, what gives close to 50MHz on GPIO PIN if you toggle it programmatically in a loop.
