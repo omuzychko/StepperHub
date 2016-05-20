@@ -28,8 +28,8 @@ So in my search of cheap stepper controller which can do the job I've found [Ard
 
 I just love TI ARM controllers (TM4C123 series). With full speed 16/32 or 32/64-bit timers they amazingly fit for this task (these controller can run up to 18 timers in 32-bit mode). But I am too lazy to prototype/DIY the board with TI controller to host Arduino CNC Shield. Luckily there are [STM32 Nucleo 64](http://ww.st.com/stm32nucleo) dev borads that come with arduino-pinout. They have very juicy STM32F4 controllers. These controllers have just two 32-bit itmers, and like a dozen 16-bit timers. So I've decided to go with 16-bit timers with 16-bit prescaller - less precision but does the job. 
 
-[Here](https://youtu.be/D3u7s1SLicY) is a demo video of eBay NEMA17 running at 3400rpm in 16x microstepping mode.
-[And here](https://youtu.be/ANXc6-onQKg) is a demo video of how to use the UART prtotocol.
+ - **[Here](https://youtu.be/D3u7s1SLicY)** is a demo video of eBay NEMA17 running at 3400rpm in 16x microstepping mode.
+ - **[And here](https://youtu.be/ANXc6-onQKg)** is a demo video of how to use the UART prtotocol.
 
 ##Implementation description
 
@@ -179,4 +179,4 @@ where
 
 ####Generating code with CubeMX project will give you an error message. Now worries - its OK!
 
-I've have overclocked CPU to 200MHz to get simpler calculations of timing parameters, so easier to debug. Its just about 10% over spec. While expirimenting I was able to run this poor CPU at 280 MHz, what gives close to 50MHz on GPIO PIN if you toggle it programmatically in a loop.
+I've got overclocked the CPU to 200MHz for simpler calculations of timing parameters, so easier to debug. Its just about 10% over the spec. While expirimenting I was able to run this poor CPU at **280 MHz !!!**, what gives close to 50MHz on GPIO PIN if you toggle it programmatically in a loop.
