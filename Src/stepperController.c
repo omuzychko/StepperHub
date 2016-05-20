@@ -457,6 +457,7 @@ void Stepper_LoadConfig(void) {
   int32_t * configPtr = (int32_t *)ADDR_FLASH_SECTOR_3;
   int32_t i = 0;
   for (i=0; i < initializedSteppersCount; i++) {
+    steppers[i].currentSPS              =
     steppers[i].minSPS                  = *configPtr++;
     steppers[i].maxSPS                  = *configPtr++;
     steppers[i].accelerationSPS         = *configPtr++;
